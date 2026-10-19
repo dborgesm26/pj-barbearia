@@ -1,5 +1,8 @@
-import { useEffect, useState } from 'react'
-import { AnimatePresence, MotionConfig, motion } from 'framer-motion'
+import { useEffect, useRef, useState } from 'react'
+import {
+  AnimatePresence, MotionConfig, motion, useMotionValueEvent,
+  useReducedMotion, useScroll, useSpring, useTransform,
+} from 'framer-motion'
 
 // ---- Dados editáveis ----------------------------------------------------
 const PHONE = '5516982184020'
@@ -91,6 +94,7 @@ const PERKS = [
 
 // ---- Animação -----------------------------------------------------------
 const ease = [0.23, 1, 0.32, 1]
+const inView = { once: true, margin: '0px 0px -10% 0px' }
 const stagger = {
   hidden: {},
   show: { transition: { staggerChildren: 0.12, delayChildren: 0.15 } },
@@ -99,14 +103,50 @@ const rise = {
   hidden: { opacity: 0, y: 40 },
   show: { opacity: 1, y: 0, transition: { duration: 0.8, ease } },
 }
+const card = { ...rise, hover: { y: -6, transition: { duration: 0.25, ease } } }
+
+// Título que sobe palavra por palavra, de dentro de uma máscara
+function SplitWords({ text, as = 'h2', className = '', delay = 0, standalone = false }) {
+  const Tag = motion[as]
+  const words = text.split(' ')
+  const own = standalone
+    ? { initial: 'hidden', whileInView: 'show', viewport: inView }
+    : {}
+  return (
+    <Tag
+      className={className}
+      aria-label={text}
+      variants={{ hidden: {}, show: { transition: { staggerChildren: 0.07, delayChildren: delay } } }}
+      {...own}
+    >
+      {words.map((w, i) => (
+        <span key={i} aria-hidden="true">
+          <span className="inline-block overflow-hidden align-bottom pb-[0.15em] -mb-[0.15em]">
+            <motion.span
+              className="inline-block"
+              variants={{ hidden: { y: '110%' }, show: { y: 0, transition: { duration: 0.7, ease } } }}
+            >
+              {w}
+            </motion.span>
+          </span>
+          {i < words.length - 1 && ' '}
+        </span>
+      ))}
+    </Tag>
+  )
+}
 
 // ---- Peças reutilizáveis ------------------------------------------------
 function Icon({ children, className = 'h-9 w-9' }) {
   return (
-    <svg className={`${className} text-gold`} viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <motion.svg
+      variants={{ hover: { rotate: -10, scale: 1.12 } }}
+      transition={{ duration: 0.25, ease }}
+      className={`${className} text-gold`} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
+    >
       {children}
-    </svg>
+    </motion.svg>
   )
 }
 
@@ -119,6 +159,7 @@ function Btn({ href, variant = 'gold', className = '', children, ...rest }) {
   return (
     <motion.a
       href={href}
+      whileHover={{ y: -2 }}
       whileTap={{ scale: 0.97 }}
       transition={{ duration: 0.16, ease }}
       {...(external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
@@ -151,12 +192,22 @@ function useOpenNow() {
   return open
 }
 
+// Barra dourada que acompanha a rolagem da página
+function ProgressBar() {
+  const { scrollYProgress } = useScroll()
+  const scaleX = useSpring(scrollYProgress, { stiffness: 120, damping: 24, mass: 0.3 })
+  return <motion.div style={{ scaleX }} className="fixed inset-x-0 top-0 z-50 h-[3px] origin-left bg-gold" aria-hidden="true" />
+}
+
 // ---- Seções -------------------------------------------------------------
 function Header() {
   const [menu, setMenu] = useState(false)
+  const [scrolled, setScrolled] = useState(false)
+  const { scrollY } = useScroll()
+  useMotionValueEvent(scrollY, 'change', (v) => setScrolled(v > 24))
   return (
-    <header className="sticky top-0 z-30 border-b border-line bg-bg/90 backdrop-blur">
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5">
+    <header className={`sticky top-0 z-30 border-b backdrop-blur transition-[background-color,border-color,box-shadow] duration-300 ${scrolled ? 'border-line bg-bg/95 shadow-[0_10px_30px_rgba(0,0,0,.45)]' : 'border-transparent bg-bg/70'}`}>
+      <div className={`mx-auto flex max-w-6xl items-center justify-between px-5 transition-[height] duration-300 ${scrolled ? 'h-14' : 'h-16'}`}>
         <a href="#inicio" className="flex items-center gap-2 font-display text-xl font-extrabold" aria-label="PJ Barbearia, início">
           <span className="pole inline-block h-7 w-2.5 rounded-full" aria-hidden="true" />
           PJ <span className="text-gold">Barbearia</span>
@@ -172,7 +223,7 @@ function Header() {
           </Btn>
           <button className="-mr-2 p-2 md:hidden" aria-label="Abrir menu" aria-expanded={menu} onClick={() => setMenu((m) => !m)}>
             <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <path d="M4 7h16M4 12h16M4 17h16" />
+              <path d={menu ? 'M6 6L18 18M18 6L6 18' : 'M4 7h16M4 12h16M4 17h16'} />
             </svg>
           </button>
         </div>
@@ -187,8 +238,18 @@ function Header() {
             className="overflow-hidden border-t border-line px-5 md:hidden"
             aria-label="Menu móvel"
           >
-            {NAV.map(([label, href]) => (
-              <a key={href} href={href} onClick={() => setMenu(false)} className="block py-3">{label}</a>
+            {NAV.map(([label, href], i) => (
+              <motion.a
+                key={href}
+                href={href}
+                onClick={() => setMenu(false)}
+                initial={{ opacity: 0, x: -12 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.3, ease, delay: 0.05 * i }}
+                className="block py-3"
+              >
+                {label}
+              </motion.a>
             ))}
           </motion.nav>
         )}
@@ -199,19 +260,25 @@ function Header() {
 
 function Hero() {
   const open = useOpenNow()
+  const reduce = useReducedMotion()
+  const ref = useRef(null)
+  const { scrollYProgress } = useScroll({ target: ref, offset: ['start start', 'end start'] })
+  const poleY = useTransform(scrollYProgress, [0, 1], [0, reduce ? 0 : 140])
+  const textY = useTransform(scrollYProgress, [0, 1], [0, reduce ? 0 : -50])
+  const fade = useTransform(scrollYProgress, [0, 0.9], [1, reduce ? 1 : 0.15])
   const label = open === null ? 'Jardim Eden, Franca' : `${open ? 'Aberto agora' : 'Fechado agora'} · Jardim Eden, Franca`
-  const dot = open === null ? 'bg-muted' : open ? 'bg-[#3ecf6b]' : 'bg-[#d9604c]'
   return (
-    <section id="inicio" className="hero-bg relative overflow-hidden">
+    <section id="inicio" ref={ref} className="hero-bg relative overflow-hidden">
       <div className="mx-auto grid max-w-6xl items-center gap-12 px-5 py-16 sm:py-24 md:grid-cols-[1.4fr_1fr]">
-        <motion.div variants={stagger} initial="hidden" animate="show">
+        <motion.div variants={stagger} initial="hidden" animate="show" style={{ y: textY, opacity: fade }}>
           <motion.p variants={rise} className="mb-6 inline-flex items-center gap-2 rounded-full border border-line bg-surface px-4 py-1.5 text-sm text-muted">
-            <span className={`h-2.5 w-2.5 rounded-full ${dot}`} />
+            <span className="relative flex h-2.5 w-2.5">
+              {open && <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#3ecf6b] opacity-60 motion-reduce:animate-none" />}
+              <span className={`relative h-2.5 w-2.5 rounded-full ${open === null ? 'bg-muted' : open ? 'bg-[#3ecf6b]' : 'bg-[#d9604c]'}`} />
+            </span>
             {label}
           </motion.p>
-          <motion.h1 variants={rise} className="text-4xl font-extrabold sm:text-6xl">
-            Estilo, tradição e respeito ao seu visual em Franca
-          </motion.h1>
+          <SplitWords as="h1" delay={0.3} className="text-4xl font-extrabold sm:text-6xl" text="Estilo, tradição e respeito ao seu visual em Franca" />
           <motion.p variants={rise} className="mt-6 max-w-xl text-lg text-muted">
             Atendimento personalizado no Jardim Eden. Agende seu horário com facilidade e sem filas.
           </motion.p>
@@ -223,9 +290,10 @@ function Hero() {
 
         <motion.div
           className="hidden justify-center md:flex"
+          style={{ y: poleY }}
           initial={{ opacity: 0, scale: 0.92 }}
           animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 1, ease, delay: 0.4 }}
+          transition={{ duration: 1, ease, delay: 0.5 }}
           aria-hidden="true"
         >
           <div className="relative">
@@ -243,21 +311,28 @@ function Services() {
   return (
     <section id="servicos" className="bg-surface py-20">
       <div className="mx-auto max-w-6xl px-5">
-        <h2 className="text-3xl font-extrabold sm:text-4xl">Serviços</h2>
-        <p className="mt-3 max-w-xl text-muted">
+        <SplitWords standalone text="Serviços" className="text-3xl font-extrabold sm:text-4xl" />
+        <motion.p
+          initial={{ opacity: 0, y: 16 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={inView}
+          transition={{ duration: 0.6, ease, delay: 0.2 }}
+          className="mt-3 max-w-xl text-muted"
+        >
           Escolha o serviço e chame no WhatsApp. A mensagem já vai pronta; é só enviar e combinar o horário e o valor.
-        </p>
+        </motion.p>
         <motion.div
           variants={stagger}
           initial="hidden"
           whileInView="show"
-          viewport={{ once: true, margin: '0px 0px -10% 0px' }}
+          viewport={inView}
           className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-4"
         >
           {SERVICES.map((s) => (
             <motion.article
               key={s.title}
-              variants={rise}
+              variants={card}
+              whileHover="hover"
               className={`flex flex-col rounded-2xl border bg-bg p-6 transition-colors duration-200 hover:border-gold ${s.featured ? 'border-gold' : 'border-line'}`}
             >
               <Icon>{s.icon}</Icon>
@@ -277,16 +352,16 @@ function Why() {
   return (
     <section id="sobre" className="py-20">
       <div className="mx-auto max-w-6xl px-5">
-        <h2 className="max-w-2xl text-3xl font-extrabold sm:text-4xl">Por que escolher a PJ Barbearia?</h2>
+        <SplitWords standalone text="Por que escolher a PJ Barbearia?" className="max-w-2xl text-3xl font-extrabold sm:text-4xl" />
         <motion.div
           variants={stagger}
           initial="hidden"
           whileInView="show"
-          viewport={{ once: true, margin: '0px 0px -10% 0px' }}
+          viewport={inView}
           className="mt-10 grid gap-5 md:grid-cols-3"
         >
           {PERKS.map((p) => (
-            <motion.div key={p.title} variants={rise} className="rounded-2xl border border-line bg-surface p-7">
+            <motion.div key={p.title} variants={card} whileHover="hover" className="rounded-2xl border border-line bg-surface p-7">
               <Icon className="h-8 w-8">{p.icon}</Icon>
               <h3 className="mt-4 text-xl font-bold">{p.title}</h3>
               <p className="mt-2 text-muted">{p.text}</p>
@@ -305,7 +380,7 @@ function Contact() {
         variants={stagger}
         initial="hidden"
         whileInView="show"
-        viewport={{ once: true, margin: '0px 0px -10% 0px' }}
+        viewport={inView}
         className="mx-auto grid max-w-6xl items-start gap-10 px-5 md:grid-cols-2"
       >
         <motion.div variants={rise}>
@@ -348,6 +423,7 @@ function Footer() {
 }
 
 function WhatsAppFab() {
+  const reduce = useReducedMotion()
   return (
     <motion.a
       href={wa('Olá! Vim pelo site e quero agendar um horário.')}
@@ -361,6 +437,14 @@ function WhatsAppFab() {
       whileTap={{ scale: 0.94 }}
       className="fixed bottom-4 right-4 z-40 grid h-14 w-14 place-items-center rounded-full bg-[#25d366] shadow-[0_8px_24px_rgba(0,0,0,.5)]"
     >
+      {!reduce && (
+        <motion.span
+          className="absolute inset-0 -z-10 rounded-full bg-[#25d366]"
+          animate={{ scale: [1, 1.7], opacity: [0.45, 0] }}
+          transition={{ duration: 1.8, ease: 'easeOut', repeat: Infinity, repeatDelay: 3.5, delay: 3 }}
+          aria-hidden="true"
+        />
+      )}
       <svg width="30" height="30" viewBox="0 0 24 24" fill="#fff" aria-hidden="true">
         <path d="M20.5 3.5A11 11 0 0 0 3.2 17.3L2 22l4.8-1.2A11 11 0 1 0 20.5 3.5Zm-8.5 17a9 9 0 0 1-4.6-1.3l-.3-.2-2.8.7.8-2.7-.2-.3a9 9 0 1 1 7.1 3.8Zm5-6.7c-.3-.1-1.6-.8-1.9-.9s-.5-.1-.7.1-.8.9-.9 1.1-.3.2-.6.1a7.4 7.4 0 0 1-3.7-3.2c-.3-.5.3-.5.8-1.5.1-.2 0-.4 0-.5l-.9-2c-.2-.5-.4-.5-.6-.5h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.8 11.8 11.8 0 0 0 4.5 4c1.7.7 2.3.8 3.1.7a2.6 2.6 0 0 0 1.7-1.2 2.1 2.1 0 0 0 .2-1.2c-.1-.1-.3-.2-.6-.3Z" />
       </svg>
@@ -371,6 +455,7 @@ function WhatsAppFab() {
 export default function App() {
   return (
     <MotionConfig reducedMotion="user">
+      <ProgressBar />
       <Header />
       <main>
         <Hero />

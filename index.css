@@ -1,0 +1,26 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { color-scheme: dark; }
+html { scroll-behavior: smooth; scroll-padding-top: 84px; }
+body { @apply bg-bg text-ink font-sans antialiased; line-height: 1.6; }
+h1, h2, h3 { font-family: 'Bricolage Grotesque', 'Arial Narrow', system-ui, sans-serif; letter-spacing: -0.02em; line-height: 1.08; text-wrap: balance; }
+a:focus-visible, button:focus-visible { outline: 3px solid #f2b94a; outline-offset: 3px; border-radius: 6px; }
+
+.pole {
+  background: repeating-linear-gradient(-45deg, #e0a431 0 14px, #0c0c0d 14px 28px, #f2efe9 28px 42px, #0c0c0d 42px 56px);
+  background-size: 79px 79px;
+  animation: pole 6s linear infinite;
+}
+@keyframes pole { to { background-position: 0 79px; } }
+.hero-bg {
+  background:
+    radial-gradient(60% 50% at 85% 20%, rgba(224,164,49,.20), transparent 70%),
+    radial-gradient(50% 40% at 10% 90%, rgba(224,164,49,.10), transparent 70%),
+    #0c0c0d;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pole { animation: none; }
+  html { scroll-behavior: auto; }
+}
